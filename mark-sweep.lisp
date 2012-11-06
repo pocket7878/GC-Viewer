@@ -35,6 +35,11 @@
 (defmethod lookup ((table <bind-table>) (symb Symbol))
   (assoc symb (bind-table table)))
 
+(defmethod obj-boundp ((table <bind-table>) (obj <lobject>))
+  (find obj (bind-table table)
+        :key #'cdr
+        :test #'equal))
+
 (defclass <lisp-vm> ()
   ((free-atoms :initform 
                (make-array *max-atom*
@@ -49,7 +54,7 @@
                            (loop repeat *max-cons*
                                  for new-cons = (make-instance '<cons>)
                                  collect new-cons))
-                           :accessor free-cells)
+                :accessor free-cells)
    (bind-table :initform 
                (make-instance '<bind-table>)
                :accessor bind-table)
@@ -82,6 +87,9 @@
         (setf (car-ref prev-cell) nil
               (cdr-ref prev-cell) nil
               (next prev-cell) next-cell)
+        finally
+        (setf (car-ref next-cell) nil
+              (cdr-ref next-cell) nil)
   (setf (next (aref cells (1- (length cells)))) nil)))
 
 (defun init-free-atoms (atoms)
@@ -259,14 +267,6 @@
               (symbolp (cadr expr)))
          (bind-val vm (cadr expr) 
                    (leval vm (caddr expr))))
-        ((car (eql 'list (car expr)))
-         (let ((new-cons (alloc-cons vm)))
-           (labels ((create-list (cell items)
-                      (if (and (= 1 (length items))
-                               (not (consp items))
-                        (setf (cdr-ref cell)
-                              (create-list
-                                (cdr items))
         ((and (eql 'cons (car expr))
               (= 2 (length (cdr expr))))
          (let ((new-cons (alloc-cons vm)))
@@ -281,7 +281,9 @@
 
 (defmethod print-object ((obj <cons>) stream)
   (princ "(" stream)
-  (print-object (car-ref obj) stream)
+  (if (null (car-ref obj))
+    (princ "NIL" stream)
+    (print-object (car-ref obj) stream))
   (when (not (null (cdr-ref obj)))
     (princ " . " stream)
     (print-object (cdr-ref obj) stream))
